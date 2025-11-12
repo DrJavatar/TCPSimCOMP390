@@ -1,0 +1,39 @@
+# Reference: https://build-cpp.github.io/cmkr/cmake-toml
+[project]
+name = "BotWithUs2"
+languages = ["C", "CXX"]
+msvc-runtime = "static"
+msvc.include-before = ["cmake/msvcflags.cmake"]
+cmake-before = """
+set(VCPKG_TARGET_TRIPLET x64-windows-static)
+
+set(VMPROTECT $ENV{vmprotect})
+"""
+
+[conditions]
+debug = "CMAKE_BUILD_TYPE MATCHES \"Debug\""
+release = "CMAKE_BUILD_TYPE MATCHES \"Release\""
+debug-optimised = "CMAKE_BUILD_TYPE MATCHES \"RelWithDebInfo\""
+
+[fetch-content]
+miniz = { git = "https://github.com/richgel999/miniz", tag = "48605fb1bd5662effe13b789d866981225e71256" }
+tracy = { git = "https://github.com/wolfpld/tracy", tag = "v0.12.2" }
+
+[vcpkg]
+version = "2025.06.13"
+packages = ["opengl", "freetype"]
+
+[find-package]
+OpenGL = { }
+freetype = { }
+
+[target.tcp]
+type = "executable"
+sources = ["src/**.cpp", "src/**.hpp"]
+include-directories = [
+    "src"
+]
+compile-features = ["cxx_std_23"]
+link-options = ["/DEBUG:FULL"]
+release.compile-options = ["/Zi", "/O2", "/Ob2"]
+link-libraries = ["OpenGL::GL", "TracyClient"]
