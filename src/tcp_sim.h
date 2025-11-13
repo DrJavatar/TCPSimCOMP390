@@ -92,6 +92,8 @@ struct Endpoint {
 
     // Stats
     size_t retransmits = 0;
+    size_t total_segments_sent = 0;
+    size_t total_acks_received = 0;
 
     // API
     void start_client();        // A starts with SYN
@@ -107,8 +109,10 @@ struct TCPConnection {
     Endpoint A, B;
     Link link;
     Time header_bytes = 40;
+    mutable size_t total_packets_dropped = 0;
+    mutable size_t total_packets_sent = 0;
     TCPConnection(Link L, size_t app_bytes);
-    void deliver(Endpoint& src, Endpoint& dst, Segment seg);
+    void deliver(Endpoint& src, Endpoint& dst, Segment seg) const;
 };
 
 inline Flags operator|(Flags a, Flags b)

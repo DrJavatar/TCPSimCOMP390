@@ -2,14 +2,21 @@
 // Created by david on 11/11/2025.
 //
 #include "tcp_sim.h"
+#include <tracy/Tracy.hpp>
 
 void Simulator::run()
 {
+    ZoneScoped;
     while (!pq.empty())
     {
         auto e = pq.top();
         pq.pop();
         now = e.t;
+
+        // Frame marker for each simulation event
+        FrameMark;
+        TracyPlot("Simulation Time", now);
+
         e.fn();
     }
 }
@@ -35,6 +42,9 @@ void Endpoint::start_client()
 
 void Endpoint::on_segment(const Segment &seg)
 {
+    ZoneScoped;
+    ZoneText(name.c_str(), name.size());
+
     // Basic receiver behavior
     if (has(seg.flags, F_SYN))
     {
@@ -95,11 +105,26 @@ void Endpoint::on_segment(const Segment &seg)
         if (seg.ack > snd_una)
         {
             // New ACK
+            total_acks_received++;
             snd_una = seg.ack;
             dupacks = 0;
+
             // Congestion control
+            bool slow_start = cwnd < ssthresh;
             if (cwnd < ssthresh) cwnd += mss;                // slow start
             else cwnd += (mss * mss) / max<uint32_t>(1, cwnd); // congestion avoidance
+
+            // Track TCP state metrics
+            TracyPlot("TCP_CWND", (int64_t)cwnd);
+            TracyPlot("TCP_SSThresh", (int64_t)ssthresh);
+            TracyPlot("TCP_InFlight", (int64_t)(snd_nxt - snd_una));
+            TracyPlot("TCP_AppBytesSent", (int64_t)app_bytes_sent);
+            TracyPlot("TCP_Retransmits", (int64_t)retransmits);
+            TracyPlot("TCP_DupAcks", (int64_t)dupacks);
+            TracyPlot("TCP_SlowStart", (int64_t )(slow_start ? 1 : 0));
+            TracyPlot("TCP_TotalACKs", (int64_t)total_acks_received);
+            TracyPlot("TCP_SegmentsSent", (int64_t)total_segments_sent);
+
             cancel_timer();
             if (snd_una < snd_nxt) arm_timer(); // still outstanding data
             try_send_data();
@@ -111,17 +136,26 @@ void Endpoint::on_segment(const Segment &seg)
         {
             // Duplicate ACK
             dupacks++;
+            TracyPlot("TCP_DupAcks", (int64_t)dupacks);
+
             if (dupacks == 3)
             {
                 // Fast retransmit / recovery
+                TracyMessage("Fast Retransmit", 0xFF0000);
                 ssthresh = max<uint32_t>(mss * 2, cwnd / 2);
                 cwnd = ssthresh + 3 * mss;
                 retransmits++;
+
+                TracyPlot("TCP_CWND", (int64_t)cwnd);
+                TracyPlot("TCP_SSThresh", (int64_t)ssthresh);
+                TracyPlot("TCP_Retransmits", (int64_t)retransmits);
+
                 send_segment(snd_una, mss, F_NONE); // retransmit oldest
                 arm_timer();
             } else if (dupacks > 3)
             {
                 cwnd += mss; // inflate
+                TracyPlot("TCP_CWND", (int64_t)cwnd);
                 try_send_data();
             }
         }
@@ -130,7 +164,9 @@ void Endpoint::on_segment(const Segment &seg)
 
 void Endpoint::try_send_data()
 {
+    ZoneScoped;
     if (name != "A" || !established) return;
+
     // Stop when all data + FIN sent
     while (true)
     {
@@ -164,11 +200,18 @@ void Endpoint::try_send_data()
 
 void Endpoint::send_segment(uint32_t seq, uint16_t len, Flags fl)
 {
+    ZoneScoped;
     Segment s;
     s.seq = seq;
     s.len = len;
     s.flags = fl;
     if (has(fl, F_ACK)) s.ack = rcv_nxt;
+
+    // Track segment transmission
+    if (name == "A") {
+        total_segments_sent++;
+    }
+
     auto &dst = (this == &(conn->A)) ? conn->B : conn->A;
     conn->deliver(*this, dst, s);
 }
@@ -186,12 +229,22 @@ void Endpoint::cancel_timer()
 
 void Endpoint::on_timeout()
 {
+    ZoneScoped;
+    TracyMessage("RTO Timeout", 0xFFA500);
+
     // Timeout: multiplicative decrease, reset to slow start
     ssthresh = max<uint32_t>(mss * 2, cwnd / 2);
     cwnd = mss;
     rto = min(4.0, rto * 2.0); // simple backoff, cap at 4s
     dupacks = 0;
     retransmits++;
+
+    // Track timeout event metrics
+    TracyPlot("TCP_CWND", (int64_t)cwnd);
+    TracyPlot("TCP_SSThresh", (int64_t)ssthresh);
+    TracyPlot("TCP_RTO", rto);
+    TracyPlot("TCP_Retransmits", (int64_t)retransmits);
+
     // Retransmit the oldest unacked (up to MSS)
     uint32_t outstanding = snd_nxt - snd_una;
     auto len = (uint16_t) min<uint32_t>(mss, outstanding ? outstanding : mss);
@@ -212,12 +265,26 @@ TCPConnection::TCPConnection(Link L, size_t app_bytes)
     B.rcv_nxt = 5000; // ISN for B will be chosen on SYN
 }
 
-void TCPConnection::deliver(Endpoint &src, Endpoint &dst, Segment seg)
+void TCPConnection::deliver(Endpoint &src, Endpoint &dst, Segment seg) const
 {
+    ZoneScoped;
     seg.wire_size = seg.len + (size_t) header_bytes;
     Time arrival = sim.now + link.xmit_delay(seg.wire_size) + link.prop_delay_s;
     bool dropped = link.lost();
-    sim.at(arrival, [this, &dst, seg, dropped]()
+
+    total_packets_sent++;
+
+    if (dropped) {
+        total_packets_dropped++;
+        TracyPlot("TCP_PacketsDropped", (int64_t)total_packets_dropped);
+        TracyPlot("TCP_PacketsSent", (int64_t)total_packets_sent);
+        TracyPlot("TCP_LossRate_percent", ((double)total_packets_dropped / (double)total_packets_sent) * 100.0);
+        TracyMessage("Packet Dropped", 0xFF00FF);
+    } else {
+        TracyPlot("TCP_PacketsSent", (int64_t)total_packets_sent);
+    }
+
+    sim.at(arrival, [ &dst, seg, dropped]()
     {
         if (!dropped) dst.on_segment(seg);
         // else: drop silently
