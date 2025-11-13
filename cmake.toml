@@ -1,6 +1,6 @@
 # Reference: https://build-cpp.github.io/cmkr/cmake-toml
 [project]
-name = "BotWithUs2"
+name = "TCPSim"
 languages = ["C", "CXX"]
 msvc-runtime = "static"
 msvc.include-before = ["cmake/msvcflags.cmake"]
