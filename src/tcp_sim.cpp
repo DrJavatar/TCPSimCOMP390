@@ -13,8 +13,7 @@ void Simulator::run()
         pq.pop();
         now = e.t;
 
-        // Frame marker for each simulation event
-        FrameMark;
+        // No FrameMark needed here - let periodic checks handle frame marking
         TracyPlot("Simulation Time", now);
 
         e.fn();
@@ -141,7 +140,7 @@ void Endpoint::on_segment(const Segment &seg)
             if (dupacks == 3)
             {
                 // Fast retransmit / recovery
-                TracyMessage("Fast Retransmit", 0xFF0000);
+                TracyMessageC("Fast Retransmit", 16, 0xFF0000);
                 ssthresh = max<uint32_t>(mss * 2, cwnd / 2);
                 cwnd = ssthresh + 3 * mss;
                 retransmits++;
@@ -230,7 +229,7 @@ void Endpoint::cancel_timer()
 void Endpoint::on_timeout()
 {
     ZoneScoped;
-    TracyMessage("RTO Timeout", 0xFFA500);
+    TracyMessageC("RTO Timeout", 11, 0xFFA500);
 
     // Timeout: multiplicative decrease, reset to slow start
     ssthresh = max<uint32_t>(mss * 2, cwnd / 2);
@@ -279,7 +278,7 @@ void TCPConnection::deliver(Endpoint &src, Endpoint &dst, Segment seg) const
         TracyPlot("TCP_PacketsDropped", (int64_t)total_packets_dropped);
         TracyPlot("TCP_PacketsSent", (int64_t)total_packets_sent);
         TracyPlot("TCP_LossRate_percent", ((double)total_packets_dropped / (double)total_packets_sent) * 100.0);
-        TracyMessage("Packet Dropped", 0xFF00FF);
+        TracyMessageC("Packet Dropped", 14, 0xFF00FF);
     } else {
         TracyPlot("TCP_PacketsSent", (int64_t)total_packets_sent);
     }
