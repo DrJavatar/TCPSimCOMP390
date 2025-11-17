@@ -114,15 +114,15 @@ void Endpoint::on_segment(const Segment &seg)
             else cwnd += (mss * mss) / max<uint32_t>(1, cwnd); // congestion avoidance
 
             // Track TCP state metrics
-            TracyPlot("TCP_CWND", (int64_t)cwnd);
-            TracyPlot("TCP_SSThresh", (int64_t)ssthresh);
-            TracyPlot("TCP_InFlight", (int64_t)(snd_nxt - snd_una));
-            TracyPlot("TCP_AppBytesSent", (int64_t)app_bytes_sent);
-            TracyPlot("TCP_Retransmits", (int64_t)retransmits);
-            TracyPlot("TCP_DupAcks", (int64_t)dupacks);
-            TracyPlot("TCP_SlowStart", (int64_t )(slow_start ? 1 : 0));
-            TracyPlot("TCP_TotalACKs", (int64_t)total_acks_received);
-            TracyPlot("TCP_SegmentsSent", (int64_t)total_segments_sent);
+            TracyPlot("TCP_CWND", (int64_t) cwnd);
+            TracyPlot("TCP_SSThresh", (int64_t) ssthresh);
+            TracyPlot("TCP_InFlight", (int64_t) (snd_nxt - snd_una));
+            TracyPlot("TCP_AppBytesSent", (int64_t) app_bytes_sent);
+            TracyPlot("TCP_Retransmits", (int64_t) retransmits);
+            TracyPlot("TCP_DupAcks", (int64_t) dupacks);
+            TracyPlot("TCP_SlowStart", (int64_t) (slow_start ? 1 : 0));
+            TracyPlot("TCP_TotalACKs", (int64_t) total_acks_received);
+            TracyPlot("TCP_SegmentsSent", (int64_t) total_segments_sent);
 
             cancel_timer();
             if (snd_una < snd_nxt) arm_timer(); // still outstanding data
@@ -135,7 +135,7 @@ void Endpoint::on_segment(const Segment &seg)
         {
             // Duplicate ACK
             dupacks++;
-            TracyPlot("TCP_DupAcks", (int64_t)dupacks);
+            TracyPlot("TCP_DupAcks", (int64_t) dupacks);
 
             if (dupacks == 3)
             {
@@ -145,16 +145,16 @@ void Endpoint::on_segment(const Segment &seg)
                 cwnd = ssthresh + 3 * mss;
                 retransmits++;
 
-                TracyPlot("TCP_CWND", (int64_t)cwnd);
-                TracyPlot("TCP_SSThresh", (int64_t)ssthresh);
-                TracyPlot("TCP_Retransmits", (int64_t)retransmits);
+                TracyPlot("TCP_CWND", (int64_t) cwnd);
+                TracyPlot("TCP_SSThresh", (int64_t) ssthresh);
+                TracyPlot("TCP_Retransmits", (int64_t) retransmits);
 
                 send_segment(snd_una, mss, F_NONE); // retransmit oldest
                 arm_timer();
             } else if (dupacks > 3)
             {
                 cwnd += mss; // inflate
-                TracyPlot("TCP_CWND", (int64_t)cwnd);
+                TracyPlot("TCP_CWND", (int64_t) cwnd);
                 try_send_data();
             }
         }
@@ -207,7 +207,8 @@ void Endpoint::send_segment(uint32_t seq, uint16_t len, Flags fl)
     if (has(fl, F_ACK)) s.ack = rcv_nxt;
 
     // Track segment transmission
-    if (name == "A") {
+    if (name == "A")
+    {
         total_segments_sent++;
     }
 
@@ -239,10 +240,10 @@ void Endpoint::on_timeout()
     retransmits++;
 
     // Track timeout event metrics
-    TracyPlot("TCP_CWND", (int64_t)cwnd);
-    TracyPlot("TCP_SSThresh", (int64_t)ssthresh);
+    TracyPlot("TCP_CWND", (int64_t) cwnd);
+    TracyPlot("TCP_SSThresh", (int64_t) ssthresh);
     TracyPlot("TCP_RTO", rto);
-    TracyPlot("TCP_Retransmits", (int64_t)retransmits);
+    TracyPlot("TCP_Retransmits", (int64_t) retransmits);
 
     // Retransmit the oldest unacked (up to MSS)
     uint32_t outstanding = snd_nxt - snd_una;
@@ -273,17 +274,19 @@ void TCPConnection::deliver(Endpoint &src, Endpoint &dst, Segment seg) const
 
     total_packets_sent++;
 
-    if (dropped) {
+    if (dropped)
+    {
         total_packets_dropped++;
-        TracyPlot("TCP_PacketsDropped", (int64_t)total_packets_dropped);
-        TracyPlot("TCP_PacketsSent", (int64_t)total_packets_sent);
-        TracyPlot("TCP_LossRate_percent", ((double)total_packets_dropped / (double)total_packets_sent) * 100.0);
+        TracyPlot("TCP_PacketsDropped", (int64_t) total_packets_dropped);
+        TracyPlot("TCP_PacketsSent", (int64_t) total_packets_sent);
+        TracyPlot("TCP_LossRate_percent", ((double) total_packets_dropped / (double) total_packets_sent) * 100.0);
         TracyMessageC("Packet Dropped", 14, 0xFF00FF);
-    } else {
-        TracyPlot("TCP_PacketsSent", (int64_t)total_packets_sent);
+    } else
+    {
+        TracyPlot("TCP_PacketsSent", (int64_t) total_packets_sent);
     }
 
-    sim.at(arrival, [ &dst, seg, dropped]()
+    sim.at(arrival, [&dst, seg, dropped]()
     {
         if (!dropped) dst.on_segment(seg);
         // else: drop silently

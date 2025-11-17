@@ -263,6 +263,7 @@ int main()
                         5 * 1024 * 1024,  // 5 MiB
                         TRIALS);
 
+
     // Scenario 2: Moderate bandwidth, moderate latency, moderate loss
     run_scenario_trials("S2: Moderate (10Mbps, 50ms, 2% loss)",
                         Link{10e6, 0.050, 0.02},
